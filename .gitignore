@@ -1,2 +1,12 @@
+# IDE
 .idea/
+.vs/
+.vscode/
+
+# Python
 .venv/
+
+# PyInstaller
+build/
+dist/
+*.spec

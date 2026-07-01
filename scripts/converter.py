@@ -1,142 +1,259 @@
 import os
 import sys
+import struct
+from pygltflib import GLTF2, DATA_URI_HEADER
+
 from pxr import Sdf, Usd, UsdShade, UsdGeom
 
+# if hasattr(sys, '_MEIPASS'):
+#         plugin_path = os.path.join(sys._MEIPASS, 'pxr', 'usd')
+#         print (plugin_path)
+#         os.environ['PXR_PLUGINPATH_NAME'] = plugin_path
 
-def find_mesh(_stage):
-        print('Finding mesh...')
-        for p in stage.Traverse():
-                if p.IsA(UsdGeom.Mesh):
-                        print(f'Binding material to {p.GetPath()}')
-                        return p
+ROOT_FORM = Sdf.Path('/root')
+MESH = ROOT_FORM.AppendChild('mesh')
+MATERIAL = ROOT_FORM.AppendChild('material')
 
-        print('Could not bind mesh')
-        return None
+UV = MATERIAL.AppendChild('st')
+SHADER = MATERIAL.AppendChild('pbr')
+NORMAL = MATERIAL.AppendChild('normal')
+DIFFUSE = MATERIAL.AppendChild('diffuse')
+SPECULAR = MATERIAL.AppendChild('specular')
+ROUGHNESS = MATERIAL.AppendChild('roughness')
 
-
-def gen_uv_texture(_stage, _material_path, _resource_path, _uv, _id):
-        print(f'Linking {_id} texture...')
-        _uv_texture = UsdShade.Shader.Define(_stage, _material_path.AppendChild(_id))
-        _uv_texture.CreateIdAttr('UsdUVTexture')
-        _uv_texture.CreateInput('file', Sdf.ValueTypeNames.Asset).Set(_resource_path)
-        _uv_texture.CreateInput('st', Sdf.ValueTypeNames.Float2).ConnectToSource(_uv.ConnectableAPI(), 'result')
-        return _uv_texture
+TEXTURE_PATH = 'textures'
 
 
-def gen_normal(_stage, _material_path, _uv, _texture_format):
-        _normal = gen_uv_texture(_stage, _material_path, f'textures/normal.{_texture_format}', _uv, 'normal')
-        _normal.CreateOutput('rgb', Sdf.ValueTypeNames.Float3)
-        _normal.CreateInput('wrapS', Sdf.ValueTypeNames.Token).Set('black')
-        _normal.CreateInput('wrapT', Sdf.ValueTypeNames.Token).Set('clamp')
-        return _normal
+def gen_uv_texture(
+            stage,
+            uv,
+            node_path,
+            resource_path):
+        print(f'Binding {resource_path}...')
+        uv_texture = UsdShade.Shader.Define(stage, node_path)
+        uv_texture.CreateIdAttr('UsdUVTexture')
+        uv_texture.CreateInput('file', Sdf.ValueTypeNames.Asset).Set(resource_path)
+        uv_texture.CreateInput('st', Sdf.ValueTypeNames.Float2).ConnectToSource(uv.ConnectableAPI(), 'result')
+        return uv_texture
 
 
-def gen_diffuse(_stage, _material_path, _uv, _texture_format):
-        _diffuse = gen_uv_texture(_stage, _material_path, f'textures/diffuse.{_texture_format}', _uv, 'diffuse')
-        _diffuse.CreateOutput('rgb', Sdf.ValueTypeNames.Float3)
-        return _diffuse
+def gen_normal(
+            stage,
+            uv,
+            texture_format):
+        normal = gen_uv_texture(stage, uv, NORMAL, f'{TEXTURE_PATH}/normal.{texture_format}')
+        normal.CreateOutput('rgb', Sdf.ValueTypeNames.Float3)
+        normal.CreateInput('wrapS', Sdf.ValueTypeNames.Token).Set('black')
+        normal.CreateInput('wrapT', Sdf.ValueTypeNames.Token).Set('clamp')
+        return normal
 
 
-def gen_specular(_stage, _material_path, _uv, _texture_format):
-        _specular = gen_uv_texture(_stage, _material_path, f'textures/specular.{_texture_format}', _uv, 'specular')
-        _specular.CreateOutput('rgb', Sdf.ValueTypeNames.Float3)
-        return _specular
+def gen_diffuse(
+            stage,
+            uv,
+            texture_format
+):
+        diffuse = gen_uv_texture(stage, uv, DIFFUSE, f'{TEXTURE_PATH}/diffuse.{texture_format}')
+        diffuse.CreateOutput('rgb', Sdf.ValueTypeNames.Float3)
+        return diffuse
 
 
-def gen_roughness(_stage, _material_path, _uv, _texture_format):
-        _roughness = gen_uv_texture(_stage, _material_path, f'textures/roughness.{_texture_format}', _uv, 'roughness')
-        _roughness.CreateOutput('r', Sdf.ValueTypeNames.Float)
-        return _roughness
+def gen_specular(
+            stage,
+            uv,
+            texture_format
+):
+        specular = gen_uv_texture(stage, uv, SPECULAR, f'{TEXTURE_PATH}/specular.{texture_format}')
+        specular.CreateOutput('rgb', Sdf.ValueTypeNames.Float3)
+        return specular
 
 
-def gen_st(_stage, _material_path, _material):
+def gen_roughness(
+            stage,
+            uv,
+            texture_format):
+        roughness = gen_uv_texture(stage, uv, ROUGHNESS, f'{TEXTURE_PATH}/roughness.{texture_format}')
+        roughness.CreateOutput('r', Sdf.ValueTypeNames.Float)
+        return roughness
+
+
+def gen_uv(
+            stage,
+            material):
         print('Unwraping UV...')
-        _st = UsdShade.Shader.Define(_stage, _material_path.AppendChild('st'))
-        _st.CreateIdAttr('UsdPrimvarReader_float2')
-        _st.CreateInput('varname', Sdf.ValueTypeNames.Token).ConnectToSource(_material.GetInput('frame:stPrimvarName'))
-        _st.CreateOutput('result', Sdf.ValueTypeNames.Float2)
-        return _st
+        uv = UsdShade.Shader.Define(stage, UV)
+        uv.CreateIdAttr('UsdPrimvarReader_float2')
+        uv.CreateInput('varname', Sdf.ValueTypeNames.Token).ConnectToSource(material.GetInput('frame:stPrimvarName'))
+        uv.CreateOutput('result', Sdf.ValueTypeNames.Float2)
+        return uv
 
 
-def gen_output(_stage, _material_path, _normal, _diffuse, _specular, _roughness):
+def gen_output(
+            stage,
+            normal,
+            diffuse,
+            specular,
+            roughness
+):
         print('Generating PBR output shader...')
-        _output = UsdShade.Shader.Define(_stage, _material_path.AppendChild('pbr'))
-        _output.CreateIdAttr("UsdPreviewSurface")
-        _output.CreateInput('useSpecularWorkflow', Sdf.ValueTypeNames.Int).Set(1)
-        _output.CreateInput("normal", Sdf.ValueTypeNames.Normal3f).ConnectToSource(_normal.ConnectableAPI(), "rgb")
-        _output.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(_diffuse.ConnectableAPI(), "rgb")
-        _output.CreateInput("specularColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(_specular.ConnectableAPI(), "rgb")
-        _output.CreateInput("roughness", Sdf.ValueTypeNames.Float).ConnectToSource(_roughness.ConnectableAPI(), "r")
-        return _output
+        output = UsdShade.Shader.Define(stage, SHADER)
+        output.CreateIdAttr('UsdPreviewSurface')
+        output.CreateInput('useSpecularWorkflow', Sdf.ValueTypeNames.Int).Set(1)
+        output.CreateInput('normal', Sdf.ValueTypeNames.Normal3f).ConnectToSource(normal.ConnectableAPI(), 'rgb')
+        output.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f).ConnectToSource(diffuse.ConnectableAPI(), 'rgb')
+        output.CreateInput('specularColor', Sdf.ValueTypeNames.Color3f).ConnectToSource(specular.ConnectableAPI(),
+                                                                                        'rgb')
+        output.CreateInput('roughness', Sdf.ValueTypeNames.Float).ConnectToSource(roughness.ConnectableAPI(), 'r')
+        return output
 
 
-def gen_material(_stage, _mesh_path, _texture_format):
+def gen_material(
+            stage,
+            texture_format
+):
         print('Generating material...')
-        _material = UsdShade.Material.Define(stage, _mesh_path.AppendChild('mat'))
-        _material.CreateInput('frame:stPrimvarName', Sdf.ValueTypeNames.Token).Set('st')
-        _material_path = _material.GetPath()
+        material = UsdShade.Material.Define(stage, MATERIAL)
+        material.CreateInput('frame:stPrimvarName', Sdf.ValueTypeNames.Token).Set('st')
 
         # Find and attach our UV map to our shader
-        _st = gen_st(_stage, _material_path, _material)
+        uv = gen_uv(stage, material)
 
         # Create our texture shaders
-        _normal = gen_normal(_stage, _material_path, _st, _texture_format)
-        _diffuse = gen_diffuse(_stage, _material_path, _st, _texture_format)
-        _specular = gen_specular(_stage, _material_path, _st, _texture_format)
-        _roughness = gen_roughness(_stage, _material_path, _st, _texture_format)
+        normal = gen_normal(stage, uv, texture_format)
+        diffuse = gen_diffuse(stage, uv, texture_format)
+        specular = gen_specular(stage, uv, texture_format)
+        roughness = gen_roughness(stage, uv, texture_format)
 
         # Attach our material inputs to a new output shader
-        _output = gen_output(_stage, _material_path, _normal, _diffuse, _specular, _roughness)
+        output = gen_output(stage, normal, diffuse, specular, roughness)
 
         # Bind our output shader to the surface material
-        _material.CreateSurfaceOutput().ConnectToSource(_output.ConnectableAPI(), 'surface')
-        _material.CreateDisplacementOutput().ConnectToSource(_output.ConnectableAPI(), 'displacement')
-        return _material
+        material.CreateSurfaceOutput().ConnectToSource(output.ConnectableAPI(), 'surface')
+        material.CreateDisplacementOutput().ConnectToSource(output.ConnectableAPI(), 'displacement')
+        return material
 
 
-def import_glb(_input_path):
-#         bpy.ops.wm.read_factory_settings(use_empty=True)
-#         bpy.ops.import_scene.gltf(
-#                 filepath=_input_path,
-#         )
-        pass
+def gen_model(stage, model_path):
+        print('Generating model...')
+        xform = UsdGeom.Xform.Define(stage, ROOT_FORM)
+        mesh = UsdGeom.Mesh.Define(stage, MESH)
+
+        print('Defining model metadata...')
+        stage.SetDefaultPrim(xform.GetPrim())
+        stage.SetMetadata('metersPerUnit', 1)
+        stage.SetMetadata('upAxis', 'Y')
+
+        gltf = GLTF2.load_binary(model_path)
+
+        # Because for *SOME* reason, pygltflib hardcodes the header, when this split would be simpler
+        # Maybe I'll make a PR on their repo later
+        for buffer in gltf.buffers:
+                buffer.uri = f'{DATA_URI_HEADER}{buffer.uri.split(';base64,')[1]}'
+
+        # There should only ever be one mesh and one primitive
+        primitive = gltf.meshes[0].primitives[0]
+
+        # Get point and face data
+        print('Translating position and face data...')
+        accessor = gltf.accessors[primitive.attributes.POSITION]
+        bufferView = gltf.bufferViews[accessor.bufferView]
+        buffer = gltf.buffers[bufferView.buffer]
+        data = gltf.get_data_from_buffer_uri(buffer.uri)
+
+        # Pull each tuple (in 3s) from the data
+        vertices = []
+        for i in range(accessor.count):
+                index = bufferView.byteOffset + accessor.byteOffset + i * 12
+                d = data[index:index + 12]
+                v = struct.unpack("<fff", d)
+                vertices.append(v)
+
+        # Bind points to USD mesh
+        mesh.GetPointsAttr().Set(vertices)
+        mesh.GetExtentAttr().Set((accessor.min, accessor.max))
+        mesh.GetFaceVertexIndicesAttr().Set(range(accessor.count))
+        mesh.GetFaceVertexCountsAttr().Set([3] * int(accessor.count / 3))
+
+        # Get normal data
+        print('Translating normal data...')
+        accessor = gltf.accessors[primitive.attributes.NORMAL]
+        bufferView = gltf.bufferViews[accessor.bufferView]
+        buffer = gltf.buffers[bufferView.buffer]
+        data = gltf.get_data_from_buffer_uri(buffer.uri)
+
+        # Pull each tuple (in 3s) from the data
+        normals = []
+        for i in range(accessor.count):
+                index = bufferView.byteOffset + accessor.byteOffset + i * 12
+                d = data[index:index + 12]
+                v = struct.unpack("<fff", d)
+                normals.append(v)
+
+        # Bind normals to USD mesh
+        mesh.GetNormalsAttr().Set(normals)
+        mesh.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
+
+        # Get UV data
+        print('Translating UV data...')
+        accessor = gltf.accessors[primitive.attributes.TEXCOORD_0]
+        bufferView = gltf.bufferViews[accessor.bufferView]
+        buffer = gltf.buffers[bufferView.buffer]
+        data = gltf.get_data_from_buffer_uri(buffer.uri)
+
+        # Pull each tuple (in 2s) from the data
+        uv = []
+        for i in range(accessor.count):
+                index = bufferView.byteOffset + accessor.byteOffset + i * 8
+                d = data[index:index + 8]
+                x, y = struct.unpack("<ff", d)
+                # Invert y-axis
+                uv.append((x, 1 - y))
+
+        # Bind UV to ST in USD mesh
+        st = UsdGeom.PrimvarsAPI(mesh).CreatePrimvar(
+                'st',
+                Sdf.ValueTypeNames.TexCoord2fArray,
+                UsdGeom.Tokens.faceVarying
+        )
+        st.Set(uv)
+        st.SetIndices(range(accessor.count))
+
+        print('Applying miscellaneous attributes...')
+        mesh.GetSubdivisionSchemeAttr().Set(UsdGeom.Tokens.none)
+        return mesh
 
 
-def export_usda(_output_path):
-#         bpy.ops.wm.usd_export(
-#                 filepath=_output_path,
-#                 selected_objects_only=True,
-#                 export_animation=False,
-#                 export_materials=False,
-#                 convert_orientation=True,
-#                 merge_parent_xform=True,
-#         )
-        pass
-
-
-def export_usdz(_base_name, _texture_format, _normal_path, _diffuse_path, _specular_path, _roughness_path):
-        print("Compressing usdz archive...")
+def export_usdz(
+            base_name,
+            texture_format,
+            normal_path,
+            diffuse_path,
+            specular_path,
+            roughness_path
+):
+        print('Compressing usdz archive...')
         # Create a writer for the target usdz file
-        writer = Sdf.ZipFileWriter.CreateNew(f'{_base_name}.usdz')
+        writer = Sdf.ZipFileWriter.CreateNew(f'{base_name}.usdz')
 
         # Add files to the archive
-        writer.AddFile(f'{_base_name}.usda', 'model.usda')
-        writer.AddFile(_normal_path, f'textures/normal.{_texture_format}')
-        writer.AddFile(_diffuse_path, f'textures/diffuse.{_texture_format}')
-        writer.AddFile(_specular_path, f'textures/specular.{_texture_format}')
-        writer.AddFile(_roughness_path, f'textures/roughness.{_texture_format}')
+        writer.AddFile(f'{base_name}.usda', 'model.usda')
+        writer.AddFile(normal_path, f'textures/normal.{texture_format}')
+        writer.AddFile(diffuse_path, f'textures/diffuse.{texture_format}')
+        writer.AddFile(specular_path, f'textures/specular.{texture_format}')
+        writer.AddFile(roughness_path, f'textures/roughness.{texture_format}')
 
         # Finalize the file
         writer.Save()
         pass
 
-def cleanup(_base_name):
+
+def cleanup(base_name):
         print('Removing temporary files...')
-        os.remove(f'{_base_name}.usda')
+        os.remove(f'{base_name}.usda')
         pass
 
 
-if __name__ == '__main__':
+def main():
         if len(sys.argv) < 7:
                 print('Invalid number of arguments.')
                 sys.exit(1)
@@ -150,20 +267,14 @@ if __name__ == '__main__':
         # Get the base name of the glb file
         base_name = glb_file.rsplit('.', 1)[0]
 
-        # Convert the glb data to usd data
-        print('Converting glb to usda...')
-        import_glb(glb_file)
-        export_usda(f'{base_name}.usda')
-
         # Open the new usd on the stage
-        stage = Usd.Stage.Open(f'{base_name}.usda')
+        stage = Usd.Stage.CreateNew(f'{base_name}.usda')
 
-        # Get our mesh
-        mesh = find_mesh(stage)
-        mesh_path = mesh.GetPath()
+        # Generate mesh from glb
+        mesh = gen_model(stage, glb_file)
 
         # Generate our new material
-        material = gen_material(stage, mesh_path, texture_format)
+        material = gen_material(stage, texture_format)
 
         # Bind the material to the mesh
         UsdShade.MaterialBindingAPI(mesh).Bind(material)
@@ -178,3 +289,7 @@ if __name__ == '__main__':
         # cleanup(base_name)
         print('Finished!')
         sys.exit(0)
+
+
+if __name__ == '__main__':
+        main()
