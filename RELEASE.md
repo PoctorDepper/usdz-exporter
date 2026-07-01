@@ -1,1 +1,1 @@
-A simple test for automation
+A simple push to test for automation
