@@ -2,13 +2,7 @@ import os
 import sys
 import struct
 from pygltflib import GLTF2, DATA_URI_HEADER
-
 from pxr import Sdf, Usd, UsdShade, UsdGeom
-
-# if hasattr(sys, '_MEIPASS'):
-#         plugin_path = os.path.join(sys._MEIPASS, 'pxr', 'usd')
-#         print (plugin_path)
-#         os.environ['PXR_PLUGINPATH_NAME'] = plugin_path
 
 ROOT_FORM = Sdf.Path('/root')
 MESH = ROOT_FORM.AppendChild('mesh')
@@ -286,7 +280,7 @@ def main():
         export_usdz(base_name, texture_format, normal_texture, diffuse_texture, specular_texture, roughness_texture)
 
         # Clean up no longer needed files
-        # cleanup(base_name)
+        cleanup(base_name)
         print('Finished!')
         sys.exit(0)
 
