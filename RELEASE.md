@@ -1,11 +1,8 @@
 ## Features
 
-- More robust logging
-- More robust arguments
-- Tangent data
-- Better specular rendering
+- Added metallic and required fields as an option
 
 ## To-do
 
-- More material nodes
-- (maybe) MaterialX
+- Extra material nodes (?)
+- MaterialX (?)
