@@ -192,7 +192,7 @@ def gen_model(stage, model_path):
         # Because for *SOME* reason, pygltflib hardcodes the header, when this split would be simpler
         # Maybe I'll make a PR on their repo later
         for buffer in gltf.buffers:
-                buffer.uri = f'{DATA_URI_HEADER}{buffer.uri.split(';base64,')[1]}'
+                buffer.uri = f"{DATA_URI_HEADER}{buffer.uri.split(';base64,')[1]}"
 
         # There should only ever be one mesh and one primitive
         primitive = gltf.meshes[0].primitives[0]
